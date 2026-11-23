@@ -20,6 +20,7 @@ import {
 } from "./data";
 import { types, states, verification } from "../shared/contracts.mjs";
 import { Modal, Field } from "./editor";
+import { Comparison } from "./comparison";
 import { Neighborhood } from "./graph";
 import { AssetIcon } from "./visual";
 const columns = [
@@ -54,6 +55,28 @@ export function Library({
   reload: () => void;
   editor: boolean;
 }) {
+  type Citation = {
+    id: string;
+    source_id: string;
+    title: string;
+    source: string;
+    passage: string;
+    claim: string;
+    kind: string;
+    version: number;
+    verification_status: string;
+  };
+  const [citations, setCitations] = useState<Citation[]>([]),
+    [preview, setPreview] = useState<{
+      count: number;
+      records: {
+        row: number;
+        title: string;
+        valid: boolean;
+        issues: string[];
+      }[];
+    }>();
+  const [compared, compare] = useState<Asset[]>([]);
   const [f, F] = useState<Filters>({ ...blank, ...initial }),
     [list, L] = useState<{ total: number; items: Asset[] }>(),
     [error, E] = useState(""),
@@ -81,14 +104,24 @@ export function Library({
           base + "/assets?" + query,
         );
         const sources =
-          (assistant && f.q) || page === "Research workspace"
+          page === "Research workspace"
             ? await Promise.all(
                 r.items
                   .slice(0, 5)
                   .map((a) => api<Detail>(base + "/assets/" + a.id)),
               )
             : [];
+        const citations =
+          assistant && f.q.trim()
+            ? await api<Citation[]>(base + "/passages?" + query)
+            : [];
         if (live) {
+          setCitations(citations);
+          if (graph && !focus && r.items.length) {
+            const first = await api<Detail>(base + "/assets/" + r.items[0].id);
+            if (!live) return;
+            G((old) => old || first);
+          }
           L(r);
           A(sources);
           E("");
@@ -134,8 +167,13 @@ export function Library({
           </div>
           <h1>{page}</h1>
         </div>
-        {editor && !assistant && (
-          <button onClick={() => D("Import records")}>
+        {editor && !assistant && !graph && (
+          <button
+            onClick={() => {
+              setPreview(undefined);
+              D("Import records");
+            }}
+          >
             <Upload size={15} /> Import
           </button>
         )}
@@ -235,7 +273,27 @@ export function Library({
         <p>Loading records…</p>
       ) : (
         <>
-          {((assistant && f.q) || page === "Research workspace") && (
+          {assistant && f.q.trim() && (
+            <section className="panel reader">
+              <h2>Cited passages</h2>
+              {!citations.length && (
+                <p>No supporting passage was found for this query.</p>
+              )}
+              {citations.map((c) => (
+                <blockquote key={c.source_id}>
+                  <b>{c.claim}</b>
+                  <p>{c.passage}</p>
+                  <button className="link" onClick={() => open(c.id)}>
+                    {c.source} · {c.title} · v{c.version}
+                  </button>
+                  <small>
+                    {c.kind} · {c.verification_status}
+                  </small>
+                </blockquote>
+              ))}
+            </section>
+          )}
+          {page === "Research workspace" && (
             <div className="panel reader">
               <h2>{assistant ? "Source passages" : "Evidence notebook"}</h2>
               {result.every((a) => !a.evidence.length) && (
@@ -279,10 +337,18 @@ export function Library({
               )}
             </div>
           )}
+          {database && compared.length > 0 && (
+            <Comparison
+              items={compared}
+              open={open}
+              clear={() => compare([])}
+            />
+          )}
           <div className="panel tablewrap">
             <table>
               <thead>
                 <tr>
+                  {database && <th>Compare</th>}
                   <th>Knowledge asset</th>
                   {(database ? cols : ["domain", "lifecycle_status"]).map(
                     (c) => (
@@ -294,6 +360,26 @@ export function Library({
               <tbody>
                 {list.items.map((a) => (
                   <tr key={a.id}>
+                    {database && (
+                      <td>
+                        <input
+                          aria-label={"Compare " + a.title}
+                          type="checkbox"
+                          checked={compared.some((x) => x.id === a.id)}
+                          disabled={
+                            compared.length >= 4 &&
+                            !compared.some((x) => x.id === a.id)
+                          }
+                          onChange={(e) =>
+                            compare(
+                              e.target.checked
+                                ? [...compared, a]
+                                : compared.filter((x) => x.id !== a.id),
+                            )
+                          }
+                        />
+                      </td>
+                    )}
                     <td>
                       <button
                         className="assetlink"
@@ -363,6 +449,15 @@ export function Library({
                     columns: cols,
                   });
                 } else {
+                  if (!preview) {
+                    setPreview(
+                      await api(base + "/imports/preview", "POST", {
+                        ...(await fileData(form.get("file") as File)),
+                        authorized: form.has("authorized"),
+                      }),
+                    );
+                    return;
+                  }
                   await api(base + "/imports", "POST", {
                     ...(await fileData(form.get("file") as File)),
                     authorized: form.has("authorized"),
@@ -390,7 +485,29 @@ export function Library({
                   Download synthetic CSV template
                 </a>
                 <Field label="CSV or XLSX file">
-                  <input type="file" required name="file" accept=".csv,.xlsx" />
+                  <input
+                    type="file"
+                    required
+                    name="file"
+                    accept=".csv,.xlsx"
+                    onChange={() => setPreview(undefined)}
+                  />
+                  {preview && (
+                    <div>
+                      <p>
+                        {preview.count} rows reviewed ·{" "}
+                        {preview.records.filter((x) => !x.valid).length} invalid
+                      </p>
+                      {preview.records
+                        .filter((x) => !x.valid)
+                        .slice(0, 10)
+                        .map((x) => (
+                          <p key={x.row}>
+                            Row {x.row} · {x.issues.join(", ")}
+                          </p>
+                        ))}
+                    </div>
+                  )}
                 </Field>
                 <label>
                   <input type="checkbox" required name="authorized" /> I am
@@ -400,8 +517,19 @@ export function Library({
             )}
             {error && <p role="alert">{error}</p>}
             <footer>
-              <button className="primary" disabled={busy}>
-                {busy ? "Saving…" : dialog}
+              <button
+                className="primary"
+                disabled={
+                  busy ||
+                  (dialog === "Import records" &&
+                    preview?.records.some((r) => !r.valid))
+                }
+              >
+                {busy
+                  ? "Working…"
+                  : dialog === "Import records" && !preview
+                    ? "Validate import"
+                    : dialog}
               </button>
             </footer>
           </form>

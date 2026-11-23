@@ -5,13 +5,22 @@ import { z } from "zod";
 import { digest, opaque, scoped, first, rows, fail } from "./db.mjs";
 import { create, change, detail, search, dashboard } from "./vault.mjs";
 import { checked, importRows } from "./files.mjs";
-import { view } from "../shared/contracts.mjs";
+import { passages } from "./passages.mjs";
+import { view, asset, evidence } from "../shared/contracts.mjs";
 
 export function application(
   db,
-  { previewUser = null, verifyIdentity = null } = {},
+  { previewUser = null, verifyIdentity = null, textOnly = false } = {},
 ) {
   const app = express();
+  function intake(body) {
+    if (textOnly && !/\.(txt|csv)$/i.test(body?.name || ""))
+      fail(
+        422,
+        "Binary intake is suspended pending an approved scanning service",
+      );
+    return body;
+  }
   app.disable("x-powered-by");
   app.use(
     "/api",
@@ -75,6 +84,15 @@ export function application(
     });
   });
   app.post("/api/session", async (req, res) => {
+    const permit = await db.tx((c) =>
+      first(c, "select allow_login($1) as allowed", [
+        digest(req.socket.remoteAddress || "unknown"),
+      ]),
+    );
+    if (!permit.allowed) {
+      res.set("Retry-After", "60");
+      fail(429, "Too many sign-in attempts. Try again in one minute.");
+    }
     const session = opaque();
     await db.tx(async (c) => {
       let p;
@@ -192,6 +210,45 @@ export function application(
       } else res.json(result);
     });
   }
+  route("get", "/passages", (c, r) => passages(c, r.query), { member: true });
+  route(
+    "post",
+    "/imports/preview",
+    async (c, r, x) => {
+      if (!["reviewer", "editor"].includes(x.role))
+        fail(403, "Editor access required");
+      if (r.body?.authorized !== true)
+        fail(422, "Confirm authorization to import");
+      const records = await importRows(intake(r.body));
+      return {
+        count: records.length,
+        records: records.map((row, i) => {
+          const a = asset.safeParse(row.asset),
+            e = row.evidence ? evidence.safeParse(row.evidence) : null;
+          return {
+            row: i + 2,
+            title: row.asset.title,
+            valid: a.success && (!e || e.success),
+            issues: [
+              ...(a.error?.issues || []),
+              ...(e?.error?.issues || []),
+            ].map((x) => x.message),
+          };
+        }),
+      };
+    },
+    { member: true },
+  );
+  route(
+    "get",
+    "/templates",
+    (c) =>
+      rows(
+        c,
+        "select name,asset_type,domain,fields from workspace_templates order by domain,name",
+      ),
+    { member: true },
+  );
   route("get", "/overview", dashboard, { member: true });
   route("get", "/assets", (c, r) => search(c, r.query));
   route("post", "/assets", (c, r, x) => create(c, x.org, r.body, x.key), {
@@ -214,7 +271,9 @@ export function application(
     "/assets/:id/:operation",
     async (c, r, x) => {
       const input =
-        r.params.operation === "attachment" ? await checked(r.body) : r.body;
+        r.params.operation === "attachment"
+          ? await checked(intake(r.body))
+          : r.body;
       return change(
         c,
         x.role,
@@ -233,10 +292,11 @@ export function application(
     async (c, r) => {
       const f = await first(
         c,
-        "select content,name from file_attachments where workspace_id=scope() and id=$1",
+        "select content,name,media_type from file_attachments where workspace_id=scope() and id=$1",
         [z.uuid().parse(r.params.id)],
       );
-      if (!f) fail(404, "File unavailable");
+      if (!f || (textOnly && f.media_type !== "text/plain"))
+        fail(404, "File unavailable");
       return f;
     },
     { member: true, binary: true },
@@ -247,7 +307,7 @@ export function application(
     async (c, r, x) => {
       if (r.body?.authorized !== true)
         fail(422, "Confirm authorization to import");
-      const input = await importRows(r.body),
+      const input = await importRows(intake(r.body)),
         ids = [];
       for (const row of input) {
         const a = await create(c, x.org, row.asset, x.key);
@@ -429,7 +489,9 @@ export function application(
     const status =
       err instanceof z.ZodError
         ? 422
-        : err.status || { 23505: 409, 23503: 422, 42501: 403 }[err.code] || 500;
+        : err.status ||
+          { AT413: 413, 23505: 409, 23503: 422, 42501: 403 }[err.code] ||
+          500;
     if (status === 500)
       console.error("Atlas request failed", err.code || err.name, err.message);
     const message =
@@ -437,11 +499,13 @@ export function application(
         ? err.issues
             .map((i) => [i.path.join("."), i.message].filter(Boolean).join(" "))
             .join(", ")
-        : err.status
-          ? err.message
-          : status === 409
-            ? "Record already exists"
-            : "Request could not be completed";
+        : err.code === "AT413"
+          ? "Workspace file quota exceeded"
+          : err.status
+            ? err.message
+            : status === 409
+              ? "Record already exists"
+              : "Request could not be completed";
     res.status(status).json({ error: message });
   });
   return app;

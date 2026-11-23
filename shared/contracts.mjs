@@ -187,3 +187,11 @@ export const event = z.object({
   correlation_id: z.uuid(),
   actor_id: z.uuid(),
 });
+
+export const transitions = {
+  Draft: ["In Review", "Archived"],
+  "In Review": ["Draft", "Published", "Archived"],
+  Published: ["Draft", "Superseded", "Archived"],
+  Superseded: ["Archived", "Draft"],
+  Archived: ["Draft"],
+};

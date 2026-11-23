@@ -2,7 +2,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { ArrowLeft, ArrowUpRight, FileText, Link2 } from "lucide-react";
 import { api, date, fileData, type Detail, type Asset } from "./data";
 import { Field, Editor } from "./editor";
-import { states, verification, relations } from "../shared/contracts.mjs";
+import { transitions, verification, relations } from "../shared/contracts.mjs";
 export function AssetDetail({
   id,
   base,
@@ -357,14 +357,23 @@ export function AssetDetail({
           <>
             <h2>Review & publication</h2>
             <p>Next review · {a.next_review_at || "Unscheduled"}</p>
-            {can && (
+            {(role === "reviewer" ||
+              (can && a.lifecycle_status === "Draft")) && (
               <form key={a.version} onSubmit={(e) => form(e, "review")}>
                 <Field label="Lifecycle">
                   <select
                     name="lifecycle_status"
                     defaultValue={a.lifecycle_status}
                   >
-                    {states.map((x) => (
+                    {(role === "reviewer"
+                      ? [
+                          a.lifecycle_status,
+                          ...(transitions[
+                            a.lifecycle_status as keyof typeof transitions
+                          ] || []),
+                        ]
+                      : ["In Review"]
+                    ).map((x) => (
                       <option key={x}>{x}</option>
                     ))}
                   </select>
@@ -374,9 +383,11 @@ export function AssetDetail({
                     name="verification_status"
                     defaultValue={a.verification_status}
                   >
-                    {verification.map((x) => (
-                      <option key={x}>{x}</option>
-                    ))}
+                    {(role === "reviewer" ? verification : ["Unverified"]).map(
+                      (x) => (
+                        <option key={x}>{x}</option>
+                      ),
+                    )}
                   </select>
                 </Field>
                 <button disabled={busy}>Save review</button>

@@ -13,6 +13,11 @@ export function supabaseVerifier(url, anonKey) {
         status: 401,
       });
     const user = await res.json();
+    if (
+      typeof user.id !== "string" ||
+      !/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(user.id)
+    )
+      throw Object.assign(Error("Invalid issuer subject"), { status: 401 });
     return issuer.origin + "#" + user.id;
   };
 }

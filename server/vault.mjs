@@ -75,13 +75,6 @@ export async function create(c, org, input, correlation = randomUUID()) {
   );
   return record(c, id, "created", correlation);
 }
-const transitions = {
-  Draft: ["In Review", "Archived"],
-  "In Review": ["Draft", "Published", "Archived"],
-  Published: ["Draft", "Superseded", "Archived"],
-  Superseded: ["Archived", "Draft"],
-  Archived: ["Draft"],
-};
 export async function change(
   c,
   role,
@@ -108,7 +101,7 @@ export async function change(
       fail(403, "Reviewer access required");
     if (
       r.lifecycle_status !== a.lifecycle_status &&
-      !transitions[a.lifecycle_status].includes(r.lifecycle_status)
+      !schema.transitions[a.lifecycle_status].includes(r.lifecycle_status)
     )
       fail(422, "Invalid lifecycle transition");
     if (
@@ -202,11 +195,11 @@ export async function change(
           digest(input.buffer),
         ],
       );
-      if (input.type === "text/plain")
+      if (input.type === "text/plain" || input.extracted)
         await c.query("insert into search_documents values(scope(),$1,$2,$3)", [
           id,
           fileId,
-          input.buffer.toString("utf8").slice(0, 64000),
+          input.extracted || input.buffer.toString("utf8").slice(0, 64000),
         ]);
     } else fail(404, "Unknown operation");
   }
@@ -218,7 +211,7 @@ export async function change(
 }
 export async function search(c, query) {
   const f = schema.filter.parse(query),
-    vec = "search_vector(a.title,a.description,a.structured_content,a.tags)";
+    vec = "folded_vector(a.title,a.description,a.structured_content,a.tags)";
   const data = [
     f.q,
     f.domain,
@@ -228,11 +221,11 @@ export async function search(c, query) {
     f.status,
     f.verification_status,
   ];
-  const where = `a.workspace_id=scope() and ($1='' or ${vec} @@ plainto_tsquery('simple',$1) or position(lower($1) in lower(a.title))>0 or exists(select 1 from search_documents d where d.workspace_id=a.workspace_id and d.asset_id=a.id and to_tsvector('simple',d.passage) @@ plainto_tsquery('simple',$1)) or exists(select 1 from evidence_records e where e.workspace_id=a.workspace_id and e.asset_id=a.id and to_tsvector('simple',e.source||' '||e.claim||' '||e.passage) @@ plainto_tsquery('simple',$1))) and ($2='' or a.domain=$2) and ($3='' or a.asset_type=$3) and ($4='' or $4=any(a.tags)) and ($5='' or a.collection=$5) and ($6='' or a.lifecycle_status=$6) and ($7='' or a.verification_status=$7)`;
+  const where = `a.workspace_id=scope() and ($1='' or ${vec} @@ plainto_tsquery('simple',folded($1)) or position(folded($1) in folded(a.title))>0 or exists(select 1 from search_documents d where d.workspace_id=a.workspace_id and d.asset_id=a.id and to_tsvector('simple',folded(d.passage)) @@ plainto_tsquery('simple',folded($1))) or exists(select 1 from evidence_records e where e.workspace_id=a.workspace_id and e.asset_id=a.id and to_tsvector('simple',folded(e.source||' '||e.claim||' '||e.passage)) @@ plainto_tsquery('simple',folded($1)))) and ($2='' or a.domain=$2) and ($3='' or a.asset_type=$3) and ($4='' or $4=any(a.tags)) and ($5='' or a.collection=$5) and ($6='' or a.lifecycle_status=$6) and ($7='' or a.verification_status=$7)`;
   const rank =
     f.sort === "title"
       ? "title,id"
-      : `ts_rank(${vec},plainto_tsquery('simple',$1)) desc,updated_at desc,id`;
+      : `ts_rank(${vec},plainto_tsquery('simple',folded($1))) desc,updated_at desc,id`;
   return {
     total: Number(
       (

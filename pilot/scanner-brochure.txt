@@ -2,4 +2,3 @@ SYNTHETIC TRAINING BROCHURE
 This unnamed scanner is a placeholder for a digital slide imaging workflow.
 Manufacturer, model, SKU, throughput, resolution, compatibility and price await an authorized manufacturer document.
 This file demonstrates linking a passage to a knowledge asset. It contains no verified product specifications.
-

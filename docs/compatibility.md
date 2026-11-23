@@ -29,4 +29,3 @@ Discovery inspected the accessible GitHub organization, default branches, shallo
 | Flow | **Blocked by Missing Dependency** | Identify the workflow owner and implemented API. |
 
 Atlas owns the editable knowledge record, source passage, publication revision and outgoing relationship. Incoming references never grant a remote application permission to change a commercial, management or execution record.
-

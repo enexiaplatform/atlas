@@ -33,4 +33,3 @@ Operator-provisioned person and service principals have independent credentials.
 Service consumers are deliberately narrow. The release exposes asset metadata and explicitly stored external references. Human-only files, evidence, graph edges, revision history and audit logs remain protected. A consumer that needs evidence passages requires a separate reviewed disclosure contract.
 
 The Memoire test talks only to the isolated Atlas server. It exercises authorized resolution, retrieval, release, withdrawal, update and replay. No credential or remote write adapter for Memoire is involved. All five application statuses are in the [compatibility matrix](compatibility.md).
-

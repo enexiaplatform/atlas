@@ -24,4 +24,3 @@ The pilot uses synthetic material prepared for this repository. It contains no r
 | Package advisory check | npm audit --omit=dev reported zero known vulnerabilities at verification time. |
 
 Screenshots in [qa](qa/) show only the isolated synthetic test workspace. The mobile screenshot includes the one synthetic record created during E2E. Evaluation did not exercise a hosted issuer, a production database, a real Servicebio dataset, real sibling receivers, load at enterprise scale or public deployment.
-

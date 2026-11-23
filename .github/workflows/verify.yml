@@ -24,4 +24,3 @@ jobs:
         with:
           name: atlas-browser-evidence
           path: test-results/*.png
-

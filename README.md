@@ -47,4 +47,3 @@ npm run test:e2e
 ```
 
 The native test starts its own disposable PostgreSQL cluster on loopback. The browser suite runs against a separate in-memory pilot. It can use installed Chrome on Windows or an executable selected by `ATLAS_CHROME`. Screenshots go to `test-results/`. GitHub Actions runs the same checks. The deployment entry point remains unconfigured and Git-triggered Vercel deployments are disabled.
-

@@ -43,4 +43,3 @@ begin
 end$$;
 revoke execute on all functions in schema atlas from public;
 grant execute on all functions in schema atlas to atlas_runtime;
-

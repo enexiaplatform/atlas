@@ -45,4 +45,3 @@ The private file store uses PostgreSQL binary columns under RLS. This keeps the 
 Title has the highest PostgreSQL FTS weight, tags rank next, followed by structured content and description. Title substrings, evidence passages, source labels and text attachments are searchable. Filtering occurs inside the scoped SQL query before pagination. English and Vietnamese text use PostgreSQL's simple configuration. Accent-insensitive matching, vector search, OCR and semantic reranking are future enhancements.
 
 The retrieval interface works without a paid subscription. The optional server ports accept a language model and embedding provider. No model is configured or invoked in the pilot.
-

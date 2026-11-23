@@ -16,4 +16,3 @@ grant atlas_runtime to atlas_gateway;
 grant usage on schema atlas to atlas_gateway;
 grant select on principals,credentials,sessions,memberships,workspaces to atlas_gateway;
 grant insert,delete on sessions to atlas_gateway;
-

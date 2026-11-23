@@ -22,4 +22,3 @@ The app supports private originals up to 4 MiB locally. JSON/base64 overhead can
 A failed transactional migration rolls back its DDL and data changes. While testing, create a new isolated database rather than dropping a shared schema. For a shipped schema change, pause writers and consumers, preserve the current data, restore the verified pre-change backup into another dedicated database, select the matching application revision, run the isolation and pilot checks, and switch the staging connection after verification. Reconcile receipts, cursors and revisions before resuming writes. Removing schema objects destroys history and is outside the application rollback path.
 
 For individual records, archive through Governance. Reviewers restore to an unverified draft. The export endpoint returns current metadata, links, evidence and file descriptors. Download private originals individually. The JSON export is not a full database backup.
-

@@ -1,6 +1,6 @@
 # Enexia Atlas
 
-Atlas is an independently runnable knowledge vault for evidence, structured records, relationships and governed publication. The Servicebio Vietnam evaluation workspace contains 12 synthetic assets across four domains, a training brochure and two fictional academic institutions. The second organization exercises tenant isolation.
+Atlas is an independently runnable knowledge vault for evidence, structured records, relationships and governed publication. The Servicebio Vietnam evaluation workspace contains 16 synthetic assets across four domains, a training brochure and two fictional academic institutions. The second organization exercises tenant isolation.
 
 ## Open the local pilot
 
@@ -26,6 +26,10 @@ The local pilot button signs in as a reviewer and workspace administrator on the
 - On an asset, **Evidence & files** records claims, passages and source references, privately stores originals and previews text. **Relationships** binds typed edges and external references. **History** exposes immutable snapshots. **Governance** handles review, publication, archive and restoration.
 - **Knowledge assistant** retrieves source passages without a model or API key. Generation, semantic retrieval and automatic conflict detection are deferred.
 - **Administration** exports metadata, shows integration status and audit trails, and lets a workspace administrator manage names, taxonomy and existing human roles. Initial identities and workspace membership are operator-provisioned.
+
+## Pilot 2.0
+
+Follow the [hands-on UAT guide](docs/pilot-uat.md) for templates, comparison, evidence-backed search and authorized imports. See the [milestone report](docs/phase2.md) for current integration status, architecture, screenshots and release gaps. To exercise the real receiver, check out the Memoire SHA pinned in the CI workflow, install its npm dependencies, set `MEMOIRE_CHECKOUT` to its directory and run `npm run test:interop`.
 
 ## Engineering and release
 

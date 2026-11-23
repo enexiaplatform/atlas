@@ -1,5 +1,7 @@
 # Atlas v1 integration guide
 
+The original Atlas-only consumer below remains a regression fixture. Phase 2 also exercises a real Memoire-side receiver with its native scope and receipt SQL. [Receiver architecture and test boundaries](phase2.md)
+
 All routes below are relative to `/api/v1/workspaces/{workspace}`. Authenticate with an Atlas-issued bearer credential, or an HTTP-only browser session. The server verifies the principal and membership on every request. API clients may never specify an actor, organization, owner or database role in the payload. The OpenAPI document covers the seven ecosystem operations, event schema, checkpoint acknowledgement and input constraints. The implementation also supports UI-only endpoints for files, views, administration and imports.
 
 | Operation | Request | Check |

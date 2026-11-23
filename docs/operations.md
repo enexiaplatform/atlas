@@ -1,5 +1,7 @@
 # Operations and release preparation
 
+**Phase 2 operations.** Use a UTF-8 database for migration 004. It installs tenant templates, Vietnamese folding, quota enforcement and login budgets. Setup upgrades the existing local synthetic pilot once. For key rotation, an authorized operator calls `rotateCredential` inside `db.tx`, hands the returned credential to the mapped principal via the approved secret store, and tests the new key. Rotation revokes that principal’s old keys and sessions. The PGlite recovery drill runs in `npm test`. The hosted handler rejects Office/PDF uploads and binary downloads pending scanning. Diagnose hosted ingress, backups and quotas in approved staging. [Current implementation and limits](phase2.md)
+
 ## Local evaluation
 
 Follow the root README. Setup operates on the local PGlite directory only. It never consults hosted database credentials. The default entry point binds to 127.0.0.1. The generated pilot keys and local database are ignored by Git. Keep confidential data out of the one-click evaluator. To back up a local evaluation, stop the process cleanly and copy the entire local directory to protected storage.
@@ -15,7 +17,7 @@ The following is an operator runbook for an approved isolated environment. No ho
 5. Set server-only `ATLAS_DATABASE_URL` to the dedicated gateway login over verified TLS. Optional `ATLAS_SUPABASE_URL` and `ATLAS_SUPABASE_ANON_KEY` configure the trusted issuer adapter. Provision person subjects as the issuer origin, a hash sign and the verified user ID. Set production mode so session cookies require HTTPS.
 6. Build the frontend and stage the Vercel handler only after authorization. Verify original API paths, PostgreSQL pooling, cold starts, sign-in, revoke, retrieval and file limits in the actual hosting environment. Git deployments are disabled in the supplied Vercel configuration.
 
-The app supports private originals up to 4 MiB locally. JSON/base64 overhead can exceed a serverless request limit. Test the platform limit and lower the production cap or move to a validated, private direct-upload flow. Add malware quarantine, backup retention, restore drills, observability, rate limiting, key rotation and per-tenant storage quotas before allowing real documents.
+The app supports private originals up to 4 MiB locally. JSON/base64 overhead can exceed a serverless request limit. Test the platform limit and lower the production cap or move to a validated, private direct-upload flow. Validate the new quotas, login limits and rotation helper against the hosted deployment. Establish backup retention, hosted restore drills, observability and malware scanning before real document intake.
 
 ## Recovery and rollback
 

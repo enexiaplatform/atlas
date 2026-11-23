@@ -1,5 +1,7 @@
 # Servicebio Vietnam pilot evaluation
 
+This is the original 12-record baseline. Pilot 2.0 upgrades it to 16 synthetic assets. [Current nontechnical UAT guide](pilot-uat.md) · [Continuation QA](phase2.md)
+
 The pilot uses synthetic material prepared for this repository. It contains no real SKU, specification, price, market size, institution buying intent or CRM records. The scope is universities and research institutes, with a Southern Vietnam emphasis. The initial SQL dashboard reports 12 assets, four domains, one published asset and two pending reviews.
 
 | Scenario | How to exercise it | Verified outcome |

@@ -1,5 +1,7 @@
 # Enexia integration compatibility matrix
 
+**Phase 2 update.** Memoire now has a Verified Isolated Integration in its own draft branch. HELM, Sentinel and Forge are planned. Flow is blocked. The matrix below preserves the discovery evidence and Phase 1 baseline. [Current integration and verification report](phase2.md)
+
 Discovery inspected the accessible GitHub organization, default branches, shallow source checkouts and Supabase project inventory before selecting runtime dependencies. A default branch is evidence of source availability. Deployment and inter-application permission mappings require separate validation.
 
 | Dependency | Classification | Evidence and interface | Atlas decision |

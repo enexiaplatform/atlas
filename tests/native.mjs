@@ -18,6 +18,7 @@ const pg = new EmbeddedPostgres({
   user: "postgres",
   persistent: false,
   authMethod: "scram-sha-256",
+  initdbFlags: ["--encoding=UTF8", "--locale=C"],
   onLog: () => {},
   postgresFlags: ["-c", "listen_addresses=127.0.0.1"],
 });

@@ -31,7 +31,7 @@ The Atlas schema and private original store remain independent. New workspace te
 | Partial | Documents and staging | The preview supports bounded original files, text, DOCX body text (XML part up to 1 MiB) and XLSX first-sheet text. Extraction is capped at 64,000 characters. PDF/PPTX remain originals only. The hosted handler suspends binary intake and downloads pending scanning. Hosted auth, file limits and recovery remain untested. |
 | Deferred | Advanced intelligence and inline editing | Optional model synthesis, semantic search, OCR and inline bulk edits. Governed edits retain version checks in the asset editor. |
 
-The verified tests use synthetic data. No human pilot acceptance has been recorded.
+The product owner subsequently reported PASS for four synthetic pilot workflows and no UX blockers. The closure report records the scope of acceptance and separate automated regression results. [UAT closure](uat-closure.md)
 
 ## Identity and isolated receiver
 
@@ -51,7 +51,7 @@ The cross-repository test uses the real receiver module, Memoire native scope fu
 
 ## Release priorities
 
-1. Run the nontechnical UAT with Servicebio and record the evidence required for each real use case.
+1. For a future real-data evaluation, agree on authorized materials and the evidence required for each use case.
 2. Approve isolated hosting, issuer subjects, native workspace mappings and the dedicated consumer credential.
 3. Rehearse hosted authentication, publication withdrawal, backup recovery, rate limiting and file limits.
 4. Add malware quarantine and scanning before enabling hosted binary access.

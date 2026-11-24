@@ -14,4 +14,4 @@ Open the local Atlas page and choose **Open synthetic Servicebio pilot**. All na
 | In the library import the supplied institutions.xlsx, confirm authorization and select Validate import. | The preview checks both rows before saving. Cancel leaves the library unchanged. Import records creates new drafts. Use the template for future authorized datasets only. |
 | From Administration export the workspace, or export selected records from a comparison. | Files contain metadata under your signed-in permissions. Original documents require a separate authenticated download. |
 
-For feedback, record the step, what you expected, what happened and whether it prevented your research task. Automated test results are in the milestone report. Human UAT sign-off remains open.
+For feedback, record the step, what you expected, what happened and whether it prevented your research task. The product owner reported PASS for Product Intelligence, Western Blot Workflow, University & Lab Mapping, and GTM Knowledge, with no UX blockers. Completion of other guide steps remains unverified. [UAT closure and regression evidence](uat-closure.md)

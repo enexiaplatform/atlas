@@ -63,8 +63,20 @@ export function Editor({
   save: (x: unknown) => Promise<void>;
   close: () => void;
 }) {
+  type Preset = {
+    name: string;
+    fields: string[];
+    asset_type: string;
+    domain: string;
+  };
+  const [presets, setPresets] = useState<Preset[]>([]),
+    [preset, setPreset] = useState<Preset>();
+  const [domain, setDomain] = useState(initial?.domain || domains[0]);
   const [terms, setTerms] = useState<{ kind: string; name: string }[]>([]);
   useEffect(() => {
+    api<Preset[]>(base + "/templates")
+      .then(setPresets)
+      .catch((e) => setError(String(e)));
     api<typeof terms>(base + "/taxonomy")
       .then(setTerms)
       .catch((e) => setError(String(e)));
@@ -77,7 +89,7 @@ export function Editor({
   );
   const keys = Array.from(
     new Set([
-      ...(templates[type as keyof typeof templates] || []),
+      ...(preset?.fields || templates[type as keyof typeof templates] || []),
       ...Object.keys(fields),
     ]),
   );
@@ -114,6 +126,26 @@ export function Editor({
       onClose={close}
     >
       <form onSubmit={submit}>
+        {!initial && presets.length > 0 && (
+          <Field label="Workspace template">
+            <select
+              value={preset?.name || ""}
+              onChange={(e) => {
+                const p = presets.find((x) => x.name === e.target.value);
+                setPreset(p);
+                if (p) {
+                  setType(p.asset_type);
+                  setDomain(p.domain);
+                }
+              }}
+            >
+              <option value="">Choose a template</option>
+              {presets.map((p) => (
+                <option key={p.name}>{p.name}</option>
+              ))}
+            </select>
+          </Field>
+        )}
         <Field label="Title">
           <input
             name="title"
@@ -125,7 +157,13 @@ export function Editor({
         </Field>
         <div className="pair">
           <Field label="Asset type">
-            <select value={type} onChange={(e) => setType(e.target.value)}>
+            <select
+              value={type}
+              onChange={(e) => {
+                setType(e.target.value);
+                setPreset(undefined);
+              }}
+            >
               {types.map((x) => (
                 <option key={x}>{x}</option>
               ))}
@@ -136,7 +174,8 @@ export function Editor({
               list="domain-options"
               name="domain"
               required
-              defaultValue={initial?.domain || domains[0]}
+              value={domain}
+              onChange={(e) => setDomain(e.target.value)}
             />
             <datalist id="domain-options">
               {Array.from(

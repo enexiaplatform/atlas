@@ -1,6 +1,7 @@
 import { writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { localDb, localRoot, pilotConfig } from "../server/local.mjs";
+import { upgradePilot } from "../pilot/upgrade.mjs";
 import { seed } from "../pilot/seed.mjs";
 const db = await localDb();
 try {
@@ -28,6 +29,7 @@ try {
       "Synthetic pilot ready. Local access keys are in the ignored .local/pilot.json file.",
     );
   }
+  await upgradePilot(db, await pilotConfig());
 } finally {
   await db.close();
 }

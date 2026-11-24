@@ -503,3 +503,157 @@ test("expired access keys, saved-view ownership, metadata export and tenant-loca
   const events = await ok(pilot.unrelated, "/events");
   assert.equal(Number(events[0].seq), 1);
 });
+test("pilot pack is idempotent, workspace scoped and accent-insensitive", async () => {
+  const { upgradePilot } = await import("../pilot/upgrade.mjs");
+  await upgradePilot(db, pilot);
+  await upgradePilot(db, pilot);
+  assert((await ok(editor, "/templates")).length >= 20);
+  assert.deepEqual(await ok(pilot.unrelated, "/templates"), []);
+  const result = await ok(viewer, "/assets?q=phong%20nghien%20cuu");
+  assert.equal(result.total, 1);
+  assert.equal(
+    (await ok(pilot.unrelated, "/assets?q=phong%20nghien%20cuu")).total,
+    0,
+  );
+});
+test("DOCX and XLSX passages, quota rollback and scoped citations", async () => {
+  const a = await ok(editor, "/assets", post(profile));
+  let version = 1;
+  for (const [filename, query] of [
+    ["research-note.docx", "archival microscopy"],
+    ["institutions.xlsx", "Southern University"],
+  ]) {
+    const data = (
+      await readFile(new URL("../pilot/" + filename, import.meta.url))
+    ).toString("base64");
+    const r = await ok(
+      editor,
+      "/assets/" + a.id + "/attachment",
+      post({ name: filename, data }, version++),
+    );
+    assert(r.attachments.some((f) => f.name === filename));
+    assert(
+      (await ok(editor, "/passages?q=" + encodeURIComponent(query))).some(
+        (s) => s.id === a.id && s.source === filename,
+      ),
+    );
+    assert.deepEqual(
+      await ok(pilot.unrelated, "/passages?q=" + encodeURIComponent(query)),
+      [],
+    );
+  }
+  const upload = {
+    name: "tiny.txt",
+    data: Buffer.from("Quota test").toString("base64"),
+  };
+  await db.tx((c) =>
+    c.query("insert into workspace_limits values($1,1)", [editor.workspace]),
+  );
+  try {
+    assert.equal(
+      (
+        await request(
+          editor,
+          "/assets/" + a.id + "/attachment",
+          post(upload, version),
+        )
+      ).status,
+      413,
+    );
+    assert.equal((await ok(editor, "/assets/" + a.id)).version, version);
+  } finally {
+    await db.tx((c) =>
+      c.query("delete from workspace_limits where workspace_id=$1", [
+        editor.workspace,
+      ]),
+    );
+  }
+});
+test("import preview validates rows without mutation and login throttling persists", async () => {
+  const csv = "title,asset_type,domain\nPreviewFixture,Broken,Market";
+  const preview = await ok(
+    editor,
+    "/imports/preview",
+    post({
+      name: "draft.csv",
+      data: Buffer.from(csv).toString("base64"),
+      authorized: true,
+    }),
+  );
+  assert.equal(preview.records[0].valid, false);
+  assert.equal((await ok(editor, "/assets?q=PreviewFixture")).total, 0);
+  for (let i = 0; i < 31; i++)
+    await fetch(url + "/api/session", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ key: "invalid" }),
+    });
+  assert.equal(
+    (
+      await fetch(url + "/api/session", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ key: "invalid" }),
+      })
+    ).status,
+    429,
+  );
+});
+test("rotating the consumer credential preserves the principal and invalidates the old key", async () => {
+  const { rotateCredential } = await import("../server/db.mjs");
+  const next = await db.tx((c) => rotateCredential(c, pilot.consumer.user));
+  assert.equal((await request(pilot.consumer, "/assets")).status, 401);
+  assert.equal(
+    (await request({ ...pilot.consumer, key: next }, "/assets")).status,
+    200,
+  );
+});
+test("hosted binary gate rejects intake and old binary download", async () => {
+  const restricted = application(gateway, { textOnly: true }).listen(
+    0,
+    "127.0.0.1",
+  );
+  await new Promise((r) => restricted.once("listening", r));
+  try {
+    const a = await ok(editor, "/assets", post(profile));
+    const body = {
+      name: "note.docx",
+      data: (
+        await readFile(new URL("../pilot/research-note.docx", import.meta.url))
+      ).toString("base64"),
+    };
+    const uploaded = await ok(
+      editor,
+      "/assets/" + a.id + "/attachment",
+      post(body, 1),
+    );
+    const root =
+      "http://127.0.0.1:" +
+      restricted.address().port +
+      "/api/v1/workspaces/" +
+      editor.workspace;
+    const headers = {
+      authorization: "Bearer " + editor.key,
+      "content-type": "application/json",
+      "if-match": "2",
+      "idempotency-key": randomUUID(),
+    };
+    assert.equal(
+      (
+        await fetch(root + "/assets/" + a.id + "/attachment", {
+          method: "POST",
+          headers,
+          body: JSON.stringify(body),
+        })
+      ).status,
+      422,
+    );
+    assert.equal(
+      (await fetch(root + "/files/" + uploaded.attachments[0].id, { headers }))
+        .status,
+      404,
+    );
+  } finally {
+    await new Promise((r) => restricted.close(r));
+  }
+});

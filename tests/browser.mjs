@@ -6,12 +6,14 @@ import { chromium } from "playwright";
 import express from "express";
 import { openDb } from "../server/db.mjs";
 import { application } from "../server/app.mjs";
+import { upgradePilot } from "../pilot/upgrade.mjs";
 import { seed } from "../pilot/seed.mjs";
 const db = await openDb();
 let browser, server;
 try {
   await db.migrate();
   const pilot = await seed(db);
+  await upgradePilot(db, pilot);
   const app = application(db, { previewUser: pilot.admin.user });
   app.use(express.static(resolve("dist")));
   server = app.listen(0, "127.0.0.1");
@@ -39,13 +41,19 @@ try {
     page.getByRole("heading", { name, exact: true }).waitFor();
   await button("Open synthetic Servicebio pilot").click();
   await heading("Knowledge overview");
-  await button("Knowledge assets 12").waitFor();
+  await button("Knowledge assets 16").waitFor();
   const out = process.env.ATLAS_SCREENSHOTS || "test-results";
   await mkdir(out, { recursive: true });
   await page.screenshot({ path: resolve(out, "overview-desktop.png") });
   await button("New asset").click();
+  await page.getByLabel("Workspace template").selectOption("Product benchmark");
+  await page
+    .getByLabel("Comparison criteria", { exact: true })
+    .fill("Evidence coverage");
   await page.getByLabel("Title", { exact: true }).fill("Browser pilot record");
   await button("Create draft").click();
+  await heading("Browser pilot record");
+  await page.reload();
   await heading("Browser pilot record");
   await button("Edit asset").click();
   await page
@@ -71,6 +79,23 @@ try {
   await page.getByLabel("Search knowledge").fill("Browser pilot record");
   await page.getByText("1 records · Page 1").waitFor();
   await button("Intelligence database").click();
+  await page
+    .getByRole("checkbox", {
+      name: "Compare Digital slide scanner",
+      exact: true,
+    })
+    .check();
+  await page
+    .getByRole("checkbox", {
+      name: "Compare Alternative slide scanner",
+      exact: true,
+    })
+    .check();
+  await heading("Record comparison");
+  await page
+    .locator("section.panel")
+    .filter({ has: page.getByRole("heading", { name: "Record comparison" }) })
+    .screenshot({ path: resolve(out, "comparison.png") });
   await button("Save view").click();
   await page.getByLabel("View name").fill("Pilot view");
   await page
@@ -78,8 +103,30 @@ try {
     .getByRole("button", { name: "Save view" })
     .click();
   await page.getByLabel("Saved views").selectOption("Pilot view");
+  await button("Knowledge assistant").click();
+  await page.getByLabel("Search knowledge").fill("unnamed scanner");
+  await page.getByRole("heading", { name: "Cited passages" }).waitFor();
+  await page.locator("blockquote").first().waitFor();
+  await page.getByLabel("Search knowledge").fill("nomatchxyz");
+  await page
+    .getByText("No supporting passage was found for this query.")
+    .waitFor();
+  await button("Knowledge library").click();
+  await button("Import").click();
+  await page
+    .locator("input[type=file]")
+    .setInputFiles("pilot/institutions.xlsx");
+  await page.getByRole("checkbox", { name: /authorized/ }).check();
+  await button("Validate import").click();
+  await page.getByText("2 rows reviewed · 0 invalid").waitFor();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Import records" })
+    .click();
+  await page.getByRole("dialog").waitFor({ state: "hidden" });
   await button("Knowledge graph").click();
   await button(/Western blot workflow/, false).click();
+  await heading("Western blot workflow");
   await page.locator(".neighborhood").waitFor();
   await page.screenshot({ path: resolve(out, "graph-desktop.png") });
   await page

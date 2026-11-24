@@ -12,7 +12,8 @@
     "test:e2e": "node tests/browser.mjs",
     "test:pg": "node tests/native.mjs",
     "contracts": "node scripts/contracts.mjs",
-    "contracts:check": "node scripts/contracts.mjs --check"
+    "contracts:check": "node scripts/contracts.mjs --check",
+    "test:interop": "node tests/memoire-isolated.mjs"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.5.17",
@@ -24,6 +25,7 @@
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "read-excel-file": "^9.3.20",
+    "saxes": "^6.0.0",
     "yauzl": "^3.4.0",
     "zod": "^4.6.7"
   },

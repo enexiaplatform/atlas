@@ -121,7 +121,7 @@ function Login({ done }: { done: (m: Me) => void }) {
 }
 function App() {
   const [me, M] = useState<Me | null>(),
-    [workspace, W] = useState(""),
+    [workspace, W] = useState(() => location.hash.slice(1).split("/")[0] || ""),
     [error, E] = useState("");
   useEffect(() => {
     api<{ signedIn: boolean }>("/api/config")
@@ -143,7 +143,10 @@ function App() {
       key={w.id}
       w={w}
       me={me}
-      switchWorkspace={W}
+      switchWorkspace={(s) => {
+        history.replaceState(null, "", location.pathname);
+        W(s);
+      }}
       refresh={() => api<Me>("/api/me").then(M)}
       logout={async () => {
         await api("/api/session", "DELETE");
@@ -168,7 +171,11 @@ function Shell({
 }) {
   const base = "/api/v1/workspaces/" + w.id;
   const [page, P] = useState("Overview"),
-    [id, I] = useState(""),
+    [id, I] = useState(() =>
+      location.hash.startsWith("#" + w.id + "/")
+        ? location.hash.split("/")[1] || ""
+        : "",
+    ),
     [initial, F] = useState<Partial<Filters>>({}),
     [summary, S] = useState<Summary>(),
     [error, E] = useState(""),
@@ -202,8 +209,19 @@ function Shell({
       live = false;
     };
   }, [base, rev]);
+  useEffect(() => {
+    const restore = () =>
+      I(
+        location.hash.startsWith("#" + w.id + "/")
+          ? location.hash.split("/")[1] || ""
+          : "",
+      );
+    window.addEventListener("popstate", restore);
+    return () => window.removeEventListener("popstate", restore);
+  }, [w.id]);
   function go(p: string, f: Partial<Filters> = {}) {
     I("");
+    if (location.hash) history.pushState(null, "", location.pathname);
     P(p);
     F(p === "Strategy & GTM" ? { domain: "GTM & Strategy", ...f } : f);
     K((n) => n + 1);
@@ -211,6 +229,7 @@ function Shell({
     window.scrollTo(0, 0);
   }
   function open(s: string) {
+    history.pushState(null, "", "#" + w.id + "/" + s);
     I(s);
     N(false);
     window.scrollTo(0, 0);
@@ -324,7 +343,10 @@ function Shell({
               base={base}
               role={w.role}
               open={open}
-              back={() => I("")}
+              back={() => {
+                history.pushState(null, "", location.pathname);
+                I("");
+              }}
               changed={() => R((n) => n + 1)}
             />
           ) : !summary ? (
@@ -579,14 +601,15 @@ function Admin({
       <div className="panel reader">
         <h2>Ecosystem integrations</h2>
         <p>
-          Memoire has an isolated API contract consumer. All five applications
-          require an authorized connection for live synchronization.
+          Memoire supports versioned references in isolated evaluation. All five
+          applications require an authorized connection for live
+          synchronization.
         </p>
         {["Memoire", "HELM", "Sentinel", "Forge", "Flow"].map((x) => (
           <div className="row" key={x}>
             {x}
             <small>
-              {x === "Memoire" ? "Contract consumer only" : "Disconnected"}
+              {x === "Memoire" ? "Isolated receiver" : "Disconnected"}
             </small>
           </div>
         ))}

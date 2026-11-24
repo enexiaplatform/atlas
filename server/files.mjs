@@ -1,4 +1,5 @@
 import { extname } from "node:path";
+import { SaxesParser } from "saxes";
 import yauzl from "yauzl";
 import { Worker } from "node:worker_threads";
 import { parse } from "csv-parse/sync";
@@ -36,6 +37,7 @@ export function decode(body) {
   };
 }
 async function checkOffice(buffer, required) {
+  let passage = "";
   await new Promise((resolve, reject) =>
     yauzl.fromBuffer(buffer, { lazyEntries: true }, (err, zip) => {
       if (err) return reject(err);
@@ -60,15 +62,48 @@ async function checkOffice(buffer, required) {
         zip.openReadStream(entry, (err, stream) => {
           if (err) return stop();
           let count = 0;
+          const chunks = [];
+          const word =
+            entry.fileName === "word/document.xml" &&
+            entry.uncompressedSize <= 1048576;
+
           stream.on("data", (chunk) => {
             count += chunk.length;
+            if (word) chunks.push(chunk);
             if (count > entry.uncompressedSize) {
               stream.destroy();
               stop();
             }
           });
           stream.on("error", stop);
-          stream.on("end", () => zip.readEntry());
+          stream.on("end", () => {
+            if (word) {
+              try {
+                let inText = false;
+                const parser = new SaxesParser({ xmlns: true });
+                parser.on("doctype", () => {
+                  throw Error("DTD not supported");
+                });
+                parser.on("opentag", (e) => {
+                  inText =
+                    e.local === "t" &&
+                    e.uri ===
+                      "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
+                });
+                parser.on("text", (s) => {
+                  if (inText && passage.length < 64000)
+                    passage += (s + " ").slice(0, 64000 - passage.length);
+                });
+                parser.on("closetag", () => {
+                  inText = false;
+                });
+                parser.write(Buffer.concat(chunks).toString("utf8")).close();
+              } catch {
+                return stop();
+              }
+            }
+            zip.readEntry();
+          });
         });
       });
       zip.on("end", () =>
@@ -79,6 +114,7 @@ async function checkOffice(buffer, required) {
       zip.readEntry();
     }),
   );
+  return passage.trim();
 }
 export async function checked(
   body,
@@ -86,8 +122,9 @@ export async function checked(
 ) {
   const f = decode(body);
   if (!allowed.includes(f.ext)) fail(422, "Unsupported file extension");
+  let extracted = "";
   try {
-    if (office[f.ext]) await checkOffice(f.buffer, office[f.ext]);
+    if (office[f.ext]) extracted = await checkOffice(f.buffer, office[f.ext]);
     else if (f.ext === "pdf") {
       if (
         !f.buffer.subarray(0, 5).equals(Buffer.from("%PDF-")) ||
@@ -101,7 +138,31 @@ export async function checked(
   } catch {
     fail(422, "File contents do not match an accepted format");
   }
-  return { ...f, type: types[f.ext] };
+  if (f.ext === "xlsx" && allowed.includes("pdf"))
+    extracted = await spreadsheet(f.buffer, true);
+  return { ...f, type: types[f.ext], extracted };
+}
+async function spreadsheet(buffer, textOnly) {
+  try {
+    return await new Promise((resolve, reject) => {
+      const worker = new Worker(new URL("./xlsx-worker.mjs", import.meta.url), {
+        workerData: { buffer, textOnly },
+        resourceLimits: { maxOldGenerationSizeMb: 64 },
+      });
+      const timer = setTimeout(() => {
+        worker.terminate();
+        reject(Error());
+      }, 5000);
+      worker.once("error", reject);
+      worker.once("message", resolve);
+      worker.once("exit", () => {
+        clearTimeout(timer);
+        reject(Error());
+      });
+    });
+  } catch {
+    fail(422, "Could not safely extract the workbook");
+  }
 }
 export async function importRows(body) {
   const f = await checked(body, ["csv", "xlsx"]);
@@ -115,25 +176,7 @@ export async function importRows(body) {
             max_record_size: 12000,
             to: 202,
           })
-        : await new Promise((resolve, reject) => {
-            const worker = new Worker(
-              new URL("./xlsx-worker.mjs", import.meta.url),
-              {
-                workerData: f.buffer,
-                resourceLimits: { maxOldGenerationSizeMb: 64 },
-              },
-            );
-            const timer = setTimeout(() => {
-              worker.terminate();
-              reject(Error());
-            }, 5000);
-            worker.once("error", reject);
-            worker.once("message", resolve);
-            worker.once("exit", () => {
-              clearTimeout(timer);
-              reject(Error());
-            });
-          });
+        : await spreadsheet(f.buffer, false);
   } catch {
     fail(422, "Could not read the import file");
   }

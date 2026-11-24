@@ -16,7 +16,7 @@ export default async function api(req, res) {
             process.env.ATLAS_SUPABASE_ANON_KEY,
           )
         : null;
-    handler = application(db, { verifyIdentity });
+    handler = application(db, { verifyIdentity, textOnly: true });
   }
   return handler(req, res);
 }

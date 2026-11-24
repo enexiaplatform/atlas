@@ -8,6 +8,8 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: actions/setup-node@v4
         with:
           node-version: 24
@@ -16,6 +18,16 @@ jobs:
       - run: npm run contracts:check
       - run: npm test
       - run: npm run test:pg
+      - uses: actions/checkout@v4
+        with:
+          repository: enexiaplatform/memoire
+          ref: 0714c31851ff85044e711c0ccdc190b8b49b8b23
+          path: .local/memoire-receiver
+          persist-credentials: false
+      - run: npm ci --prefix .local/memoire-receiver
+      - run: npm run test:interop
+        env:
+          MEMOIRE_CHECKOUT: .local/memoire-receiver
       - run: npm run build
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e

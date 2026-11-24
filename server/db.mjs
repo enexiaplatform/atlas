@@ -9,7 +9,7 @@ export const opaque = () => randomBytes(32).toString("base64url");
 export function fail(status, message) {
   throw Object.assign(new Error(message), { status });
 }
-export async function openDb({ directory, connectionString } = {}) {
+export async function openDb({ directory, connectionString, backup } = {}) {
   let engine, transact;
   if (connectionString) {
     engine = new pg.Pool({ connectionString });
@@ -29,7 +29,10 @@ export async function openDb({ directory, connectionString } = {}) {
     };
   } else {
     if (directory) await mkdir(directory, { recursive: true });
-    engine = new PGlite(directory);
+    engine = new PGlite({
+      dataDir: directory,
+      ...(backup ? { loadDataDir: backup } : {}),
+    });
     transact = (fn) => engine.transaction(fn);
   }
   const tx = (fn) =>
@@ -39,6 +42,7 @@ export async function openDb({ directory, connectionString } = {}) {
     });
   return {
     tx,
+    ...(connectionString ? {} : { backup: () => engine.dumpDataDir() }),
     close: () => (connectionString ? engine.end() : engine.close()),
     migrate: () =>
       transact(async (c) => {
@@ -47,6 +51,7 @@ export async function openDb({ directory, connectionString } = {}) {
           ["001_atlas.sql", "knowledge_assets"],
           ["002_provenance.sql", "search_documents"],
           ["003_workspace.sql", "workspace_admins"],
+          ["004_workspace_tools.sql", "workspace_templates"],
         ]) {
           if (
             (
@@ -126,4 +131,21 @@ export async function provision(c, name, label, role = "reviewer", workspace) {
     [digest(key), user],
   );
   return { org, workspace, user, key };
+}
+/** Operator-only rotation. Run in one owner transaction and hand the returned key to the designated principal. */
+export async function rotateCredential(c, principal) {
+  const actor = await first(
+    c,
+    "select id from principals where id=$1 for update",
+    [principal],
+  );
+  if (!actor) fail(404, "Principal unavailable");
+  const key = opaque();
+  await c.query("delete from credentials where principal_id=$1", [principal]);
+  await c.query("delete from sessions where principal_id=$1", [principal]);
+  await c.query(
+    "insert into credentials values($1,$2,now()+interval '30 days')",
+    [digest(key), principal],
+  );
+  return key;
 }

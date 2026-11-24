@@ -1,5 +1,7 @@
 # Architecture and trust boundaries
 
+The following is the Phase 1 design record. Phase 2 adds scoped templates, folded search, document passage indexing, file quotas, rate limits and a Memoire receiver. [Updated architecture and controls](phase2.md)
+
 React/Vite serves a responsive desktop-first client. A same-origin Express application authenticates sessions and API credentials, validates versioned commands, and uses PostgreSQL transactions. Both local PGlite and the hosted PostgreSQL adapter execute the same domain SQL and migrations. A standalone Vercel handler accepts server-side configuration. The local process binds only to loopback.
 
 ## Persistence and authority

@@ -36,24 +36,27 @@ export function disposableSupabase(directory) {
     if (!user.access_token) throw Error("Expected confirmed disposable signup");
     return { id: user.user.id, token: user.access_token };
   }
-  async function reload() {
+  async function reload(token, workspace, owner) {
     await query(
       "alter role authenticator set pgrst.db_pre_request='memoire_private.apply_workspace_data_scope'",
     );
     await query("notify pgrst,'reload config'");
     await query("notify pgrst,'reload schema'");
     for (let i = 0; i < 40; i++) {
-      const response = await fetch(status.API_URL + "/rest/v1/", {
-        headers: {
-          apikey: status.ANON_KEY,
-          authorization: "Bearer " + status.SERVICE_ROLE_KEY,
+      const response = await fetch(
+        status.API_URL + "/rest/v1/rpc/memoire_active_data_owner",
+        {
+          method: "POST",
+          body: "{}",
+          headers: {
+            apikey: status.ANON_KEY,
+            authorization: "Bearer " + token,
+            "content-type": "application/json",
+            "x-memoire-data-workspace": workspace,
+          },
         },
-      });
-      if (
-        response.ok &&
-        (await response.text()).includes("memoire_atlas_progress_op")
-      )
-        return;
+      );
+      if (response.ok && (await response.json()) === owner) return;
       await new Promise((r) => setTimeout(r, 250));
     }
     throw Error("Disposable Data API schema did not reload");

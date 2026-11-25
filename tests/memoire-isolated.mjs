@@ -96,7 +96,7 @@ try {
   );
   // Local transport fixture implements only the Supabase endpoints used by the actual receiver.
   // Its RLS policies, workspace resolver, pre-request hook and receipt RPC execute in PostgreSQL.
-  if (stack) await memo.reload();
+  if (stack) await memo.reload(login, mapping.workspace, mapping.owner);
   else {
     const facade = express();
     facade.use(express.json());

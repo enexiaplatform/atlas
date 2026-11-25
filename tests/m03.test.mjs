@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { supabaseVerifier } from "../server/identity.mjs";
+import { withinOfficeLimits } from "../server/files.mjs";
 import http from "node:http";
 import { readFile } from "node:fs/promises";
 import { inspectQuarantined } from "../server/quarantine.mjs";
@@ -32,6 +33,12 @@ test("verified identity requires the configured issuer, subject and unexpired to
     await assert.rejects(verify(envelope({ ...claims, ...overrides })), {
       status: 401,
     });
+});
+test("Office archive entry and expanded-size boundaries", () => {
+  const limit = 12 * 1024 * 1024;
+  assert(withinOfficeLimits(500, limit));
+  assert(!withinOfficeLimits(501, 1));
+  assert(!withinOfficeLimits(1, limit + 1));
 });
 test("scanner approves only validated identical bytes", async () => {
   const bytes = await readFile(

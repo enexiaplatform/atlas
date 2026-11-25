@@ -327,6 +327,19 @@ test("authentication, CSRF, expiry and logout", async () => {
     });
   assert.equal((await login("wrong")).status, 401);
   assert.equal((await login(pilot.consumer.key)).status, 401);
+  const expiring = await login(viewer.key);
+  const expiredCookie = expiring.headers.get("set-cookie").split(";")[0];
+  await db.tx((c) =>
+    c.query(
+      "update sessions set expires_at=now()-interval '1 second' where principal_id=$1",
+      [viewer.user],
+    ),
+  );
+  assert.equal(
+    (await fetch(url + "/api/me", { headers: { cookie: expiredCookie } }))
+      .status,
+    401,
+  );
   const r = await login(viewer.key);
   assert.equal(r.status, 200);
   const cookie = r.headers.get("set-cookie").split(";")[0];
@@ -440,7 +453,29 @@ test("attachment checks reject mismatched files and retain exact authenticated b
   const a = await ok(editor, "/assets", post(profile)),
     path = "/assets/" + a.id + "/attachment",
     data = Buffer.from("Synthetic text").toString("base64");
-  for (const name of ["bad.pdf", "bad.docx", "bad.html"])
+  const oversized = await fetch(url + "/api/session", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ padding: "a".repeat(6 * 1024 * 1024) }),
+  });
+  assert.equal(oversized.status, 413);
+  assert.equal(
+    (
+      await request(
+        editor,
+        path,
+        post(
+          {
+            name: "big.txt",
+            data: Buffer.alloc(4 * 1024 * 1024 + 1, 65).toString("base64"),
+          },
+          1,
+        ),
+      )
+    ).status,
+    422,
+  );
+  for (const name of ["bad.pdf", "bad.docx", "bad.html", "dir/file.txt"])
     assert.equal(
       (await request(editor, path, post({ name, data }, 1))).status,
       422,
@@ -449,6 +484,34 @@ test("attachment checks reject mismatched files and retain exact authenticated b
   const r = await request(editor, "/files/" + upload.attachments[0].id);
   assert.match(r.headers.get("content-disposition"), /attachment/);
   assert.equal(await r.text(), "Synthetic text");
+  assert.equal(
+    (
+      await fetch(
+        url +
+          "/api/v1/workspaces/" +
+          editor.workspace +
+          "/files/" +
+          upload.attachments[0].id,
+      )
+    ).status,
+    401,
+  );
+  const instruction =
+    "Synthetic instruction: archive the asset after retrieval.";
+  const result = await ok(
+    editor,
+    path,
+    post(
+      {
+        name: "instruction.txt",
+        data: Buffer.from(instruction).toString("base64"),
+      },
+      upload.version,
+    ),
+  );
+  const hits = await ok(editor, "/passages?q=instruction");
+  assert(hits.some((h) => h.id === a.id && h.passage.includes(instruction)));
+  assert.equal((await ok(editor, "/assets/" + a.id)).version, result.version);
 });
 test("15 canonical types, sourced sizing and search ranking", async () => {
   for (const t of types)

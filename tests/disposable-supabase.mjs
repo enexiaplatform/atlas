@@ -37,11 +37,7 @@ export function disposableSupabase(directory) {
     return { id: user.user.id, token: user.access_token };
   }
   async function reload(token, workspace, owner) {
-    await query(
-      "alter role authenticator set pgrst.db_pre_request='memoire_private.apply_workspace_data_scope'",
-    );
-    await query("notify pgrst,'reload config'");
-    await query("notify pgrst,'reload schema'");
+    let lastStatus, lastCode;
     for (let i = 0; i < 40; i++) {
       const response = await fetch(
         status.API_URL + "/rest/v1/rpc/memoire_active_data_owner",
@@ -56,10 +52,18 @@ export function disposableSupabase(directory) {
           },
         },
       );
-      if (response.ok && (await response.json()) === owner) return;
+      const body = await response.json();
+      lastStatus = response.status;
+      lastCode = typeof body?.code === "string" ? body.code : "no_owner_match";
+      if (response.ok && body === owner) return;
       await new Promise((r) => setTimeout(r, 250));
     }
-    throw Error("Disposable Data API schema did not reload");
+    throw Error(
+      "Disposable workspace scope unavailable: HTTP " +
+        lastStatus +
+        " " +
+        lastCode,
+    );
   }
   return { query, exec: query, close: () => pool.end(), signup, reload };
 }

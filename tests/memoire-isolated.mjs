@@ -5,7 +5,7 @@ import { pathToFileURL } from "node:url";
 import { readFile } from "node:fs/promises";
 import { PGlite } from "@electric-sql/pglite";
 import express from "express";
-import { openDb, opaque } from "../server/db.mjs";
+import { openDb, opaque, rotateCredential } from "../server/db.mjs";
 import { application } from "../server/app.mjs";
 import { seed } from "../pilot/seed.mjs";
 const sibling = resolve(
@@ -96,8 +96,12 @@ try {
   );
   // Local transport fixture implements only the Supabase endpoints used by the actual receiver.
   // Its RLS policies, workspace resolver, pre-request hook and receipt RPC execute in PostgreSQL.
-  if (stack) await memo.reload(login, mapping.workspace, mapping.owner);
-  else {
+  if (stack) {
+    await memo.exec(
+      await migration("20261116051000_enable_native_workspace_data_api.sql"),
+    );
+    await memo.reload(login, mapping.workspace, mapping.owner);
+  } else {
     const facade = express();
     facade.use(express.json());
     facade.use(async (req, res) => {
@@ -186,13 +190,13 @@ try {
   }
   mapping.issuer = process.env.SUPABASE_URL;
   let loseAck = true;
+  process.env.MEMOIRE_ATLAS_CONSUMER_KEY = consumer.key;
   const mapp = express();
   mapp.use(express.json());
   mapp.all(
     "/api/commercial",
     atlasReceiver({
       mapping,
-      credential: consumer.key,
       fetchImpl: (url, opts) => {
         if (
           loseAck &&
@@ -235,8 +239,22 @@ try {
   assert.equal(initial.version, initial.pinned_version);
   await expect(call({ command: "sync" }), 503);
   await expect(call({ command: "sync" }), 429);
+  const diagnosticRequest = () =>
+    fetch(mUrl + "&diagnostics=1", {
+      headers: {
+        authorization: "Bearer " + login,
+        "x-memoire-data-workspace": mapping.workspace,
+      },
+    });
+  const failed = await expect(diagnosticRequest());
+  assert.equal(failed.retry_count, 1);
+  assert(failed.failed_event_seq);
   await new Promise((resolve) => setTimeout(resolve, 1100));
   await expect(call({ command: "sync" }));
+  // Operator rewind simulates restoring an earlier cursor while retaining receipts.
+  await memo.query("update memoire_atlas_progress set checkpoint=0");
+  const replay = await expect(call({ command: "sync" }));
+  assert.equal(replay.processed, 1);
   assert.equal(
     (await memo.query("select count(*)::int n from memoire_atlas_receipts"))
       .rows[0].n,
@@ -292,7 +310,7 @@ try {
   a = await review("Published", a.version);
   const missed = await expect(call());
   assert(missed.pinned_version < missed.version);
-  await expect(call({ command: "pin", asset: id }));
+  await expect(call({ command: "sync" }));
   assert.equal((await expect(call())).pinned_version, a.version);
   await expect(call(undefined, foreign), 404);
   await expect(call(undefined, login, randomUUID()), 404);
@@ -346,10 +364,15 @@ try {
       await recovered.close();
     }
   }
-  await atlas.tx((c) =>
-    c.query("delete from credentials where principal_id=$1", [consumer.user]),
-  );
+  const rotated = await atlas.tx((c) => rotateCredential(c, consumer.user));
   await expect(call(), 503);
+  assert.equal(
+    (await expect(diagnosticRequest(), 503)).credential_status,
+    "rejected",
+  );
+  process.env.MEMOIRE_ATLAS_CONSUMER_KEY = rotated;
+  assert.equal((await expect(diagnosticRequest())).checkpoint, diag.checkpoint);
+  await expect(call({ command: "sync" }));
   console.log(
     "PASS isolated Memoire API + real receipt SQL: pin, revision, duplicate receipt, interrupted acknowledgement, withdrawal, archive and identity/workspace denial.",
   );

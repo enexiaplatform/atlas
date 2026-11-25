@@ -1,3 +1,5 @@
+import { ingressAddress } from "./ingress.mjs";
+import { runtimeReady } from "./staging.mjs";
 import express from "express";
 import { knowledgeProviders } from "./providers.mjs";
 import { randomUUID } from "node:crypto";
@@ -10,9 +12,25 @@ import { view, asset, evidence } from "../shared/contracts.mjs";
 
 export function application(
   db,
-  { previewUser = null, verifyIdentity = null, textOnly = false } = {},
+  {
+    previewUser = null,
+    verifyIdentity = null,
+    textOnly = false,
+    trustedPeer = null,
+  } = {},
 ) {
   const app = express();
+  const clientAddress = ingressAddress(trustedPeer);
+  app.get("/api/health/live", (_req, res) =>
+    res.set("Cache-Control", "no-store").json({ live: true }),
+  );
+  app.get("/api/health/ready", async (_req, res) => {
+    const ready = await runtimeReady(db).catch(() => false);
+    res
+      .set("Cache-Control", "no-store")
+      .status(ready ? 200 : 503)
+      .json({ ready });
+  });
   function intake(body) {
     if (textOnly && !/\.(txt|csv)$/i.test(body?.name || ""))
       fail(
@@ -86,7 +104,7 @@ export function application(
   app.post("/api/session", async (req, res) => {
     const permit = await db.tx((c) =>
       first(c, "select allow_login($1) as allowed", [
-        digest(req.socket.remoteAddress || "unknown"),
+        digest(clientAddress(req)),
       ]),
     );
     if (!permit.allowed) {
@@ -95,29 +113,33 @@ export function application(
     }
     const session = opaque();
     await db.tx(async (c) => {
-      let p;
+      let p,
+        expiresAt = null;
       if (req.body?.pilot && previewAllowed(req)) p = { id: previewUser };
       else if (req.body?.identityToken && verifyIdentity) {
-        const subject = await verifyIdentity(
+        const identity = await verifyIdentity(
           z.string().max(8192).parse(req.body.identityToken),
         );
         p = await first(
           c,
           "select id from principals where subject=$1 and kind='person'",
-          [subject],
+          [identity.subject],
+        );
+        expiresAt = new Date(
+          Math.min(Date.now() + 8 * 3600000, identity.expiresAt * 1000),
         );
       } else {
         const key = z.string().max(128).parse(req.body?.key);
         p = await first(
           c,
-          "select p.id from credentials k join principals p on p.id=k.principal_id where digest=$1 and expires_at>now() and kind='person'",
+          "select p.id,k.expires_at from credentials k join principals p on p.id=k.principal_id where digest=$1 and expires_at>now() and kind='person'",
           [digest(key)],
         );
       }
       if (!p) fail(401, "Identity unavailable");
       await c.query(
-        "insert into sessions values($1,$2,now()+interval '8 hours')",
-        [digest(session), p.id],
+        "insert into sessions values($1,$2,least(now()+interval '8 hours',$3::timestamptz))",
+        [digest(session), p.id, expiresAt ?? p.expires_at ?? null],
       );
     });
     res
@@ -493,7 +515,7 @@ export function application(
           { AT413: 413, 23505: 409, 23503: 422, 42501: 403 }[err.code] ||
           500;
     if (status === 500)
-      console.error("Atlas request failed", err.code || err.name, err.message);
+      console.error("Atlas request failed", err.code || err.name);
     const message =
       err instanceof z.ZodError
         ? err.issues
@@ -501,11 +523,13 @@ export function application(
             .join(", ")
         : err.code === "AT413"
           ? "Workspace file quota exceeded"
-          : err.status
-            ? err.message
-            : status === 409
-              ? "Record already exists"
-              : "Request could not be completed";
+          : err.type === "entity.parse.failed"
+            ? "Invalid JSON body"
+            : err.status
+              ? err.message
+              : status === 409
+                ? "Record already exists"
+                : "Request could not be completed";
     res.status(status).json({ error: message });
   });
   return app;

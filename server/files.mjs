@@ -36,6 +36,9 @@ export function decode(body) {
     buffer,
   };
 }
+export function withinOfficeLimits(entries, expandedBytes) {
+  return entries <= 500 && expandedBytes <= 12 * 1024 * 1024;
+}
 async function checkOffice(buffer, required) {
   let passage = "";
   await new Promise((resolve, reject) =>
@@ -51,8 +54,7 @@ async function checkOffice(buffer, required) {
       zip.on("entry", (entry) => {
         size += entry.uncompressedSize;
         if (
-          names.size >= 500 ||
-          size > 12 * 1024 * 1024 ||
+          !withinOfficeLimits(names.size + 1, size) ||
           names.has(entry.fileName) ||
           entry.generalPurposeBitFlag & 1 ||
           /vbaproject|activex|embeddings\//i.test(entry.fileName)
@@ -133,7 +135,11 @@ export async function checked(
         throw Error();
     } else {
       new TextDecoder("utf-8", { fatal: true }).decode(f.buffer);
-      if (f.buffer.includes(0)) throw Error();
+      if (
+        f.buffer.includes(0) ||
+        f.buffer.subarray(0, 5).equals(Buffer.from("%PDF-"))
+      )
+        throw Error();
     }
   } catch {
     fail(422, "File contents do not match an accepted format");

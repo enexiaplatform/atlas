@@ -78,6 +78,45 @@ after(async () => {
   if (gateway && gateway !== db) await gateway.close();
   await db?.close();
 });
+test("health reports liveness and accepts only non-owner gateway for readiness", async () => {
+  assert.equal((await fetch(url + "/api/health/live")).status, 200);
+  assert.equal(
+    (await fetch(url + "/api/health/ready")).status,
+    process.env.ATLAS_DISPOSABLE_PG ? 200 : 503,
+  );
+});
+test("parallel uploads to separate assets compete for one remaining file", async () => {
+  const a = await ok(editor, "/assets", post(profile)),
+    b = await ok(editor, "/assets", post(profile));
+  const upload = {
+    name: "quota.txt",
+    data: Buffer.from("abc").toString("base64"),
+  };
+  await db.tx((c) =>
+    c.query(
+      "insert into workspace_limits select $1,coalesce(sum(octet_length(content)),0)+3 from file_attachments where workspace_id=$1",
+      [editor.workspace],
+    ),
+  );
+  try {
+    const responses = await Promise.all(
+      [a, b].map((asset) =>
+        request(
+          editor,
+          "/assets/" + asset.id + "/attachment",
+          post(upload, asset.version),
+        ),
+      ),
+    );
+    assert.deepEqual(responses.map((r) => r.status).sort(), [200, 413]);
+  } finally {
+    await db.tx((c) =>
+      c.query("delete from workspace_limits where workspace_id=$1", [
+        editor.workspace,
+      ]),
+    );
+  }
+});
 test("A · scanner brochure, passage, competing model and comparison are traceable", async () => {
   const a = await ok(pilot.admin, "/assets/" + pilot.ids.scanner);
   assert.equal(a.evidence[0].attachment_id, a.attachments[0].id);

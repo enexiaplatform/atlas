@@ -5,7 +5,7 @@ permissions:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
         with:
@@ -21,13 +21,24 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: enexiaplatform/memoire
-          ref: 0714c31851ff85044e711c0ccdc190b8b49b8b23
+          ref: f51e469e1014d4d7836ea88c8308f95d0a981529
           path: .local/memoire-receiver
           persist-credentials: false
       - run: npm ci --prefix .local/memoire-receiver
       - run: npm run test:interop
         env:
           MEMOIRE_CHECKOUT: .local/memoire-receiver
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.39.2
+      - name: Run receiver against disposable GoTrue and PostgREST
+        env:
+          MEMOIRE_CHECKOUT: .local/memoire-receiver
+          ATLAS_DISPOSABLE_SUPABASE_DIR: ${{ runner.temp }}/atlas-disposable
+        run: |
+          mkdir "$ATLAS_DISPOSABLE_SUPABASE_DIR"
+          (cd "$ATLAS_DISPOSABLE_SUPABASE_DIR" && supabase init && supabase start -x studio,storage-api,imgproxy,realtime,edge-runtime,logflare,vector,postgres-meta,inbucket,supavisor >/dev/null)
+          npm run test:interop
       - run: npm run build
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e
